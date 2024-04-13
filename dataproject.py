@@ -135,12 +135,18 @@ print('Cleaned data types:\n', df_3.dtypes)
 print('\nSample of cleaned data:\n', df_3.head(5))
 print('\nShape of DataFrame df_3: ', df_3.shape, '\n')
 
-# Create subsets of df_3 dataFrame
+# Create new columns and subsets of df_3 dataFrame
 df_3['was_deadly'] = df_3['total_killed'] > 0
 df_3['was_injury'] = df_3['total_injured'] > 0
 df_3['dark_hours'] = (df_3['crash_time'] < df_3['sunrise']) | (df_3['crash_time'] > df_3['sunset'])
+df_days_visibility = df_3['days_visibility'].round()
+df_days_temp = (df_3['days_temp'] / 10).round() * 10
+df_crash_type_injury = df_3.groupby(['crash_type', 'was_injury']).size().reset_index(name='count')
 df_weather_injury = df_3.groupby(['days_conditions', 'was_injury']).size().reset_index(name='count')
 df_control_condition_injury = df_3.groupby(['traffic_control_device', 'was_injury']).size().reset_index(name='count')
+df_3['crash_time'] = pd.to_datetime(df_3['crash_time'])
+df_rounded_crash_time = df_3['crash_time'].dt.hour.round()
+
 
 # print descriptive stats for key attributes
 for column in df_3:
@@ -151,23 +157,28 @@ for column in df_3:
 
 ######################   FIGURES / PLOTS  #############################
 
+fig_labels = ['No', 'Yes']
+
 #                           FIGURE 1
 # Set the figure size
 plt.figure(figsize=(10, 6))
 
 # Create grouped bar plot
-sns.countplot(x='crash_type', hue='was_injury', data=df_3)
+sns.barplot(x='count', y='crash_type', hue='was_injury', data=df_crash_type_injury)
 
 # Add labels and title
-plt.xlabel('Crash Type', fontsize=12)
-plt.ylabel('Count of Crashes', fontsize=12)
+plt.xlabel('Count of Crashes', fontsize=12)
+plt.ylabel('Crash Types', fontsize=12)
 plt.title('Crash Types and Injury Outcome', fontsize=14)
 
 # Rotate x-axis labels for better readability
-plt.xticks(rotation=45, fontsize=10)
+plt.xticks(fontsize=12)
 
 # Set legend title and adjust legend fontsize
-plt.legend(title='Was_Injury', fontsize=10)
+fig1_legend = plt.legend(title='Was_Injury', fontsize=10)
+
+for t, l in zip(fig1_legend.texts, fig_labels):
+    t.set_text(l)
 
 # Adjust layout to prevent overlapping labels
 plt.tight_layout()
@@ -177,7 +188,7 @@ plt.show()
 
 #                           FIGURE 2
 # Set the figure size
-plt.figure(figsize=(14, 8))
+plt.figure(figsize=(10, 6))
 
 # Create horizontal bar plot
 sns.barplot(x='count', y='days_conditions', hue='was_injury', data=df_weather_injury)
@@ -189,7 +200,10 @@ plt.title('Weather Conditions and Injury Outcome', fontsize=14)
 
 plt.xticks(fontsize=12)
 
-plt.legend(title='Was_Injury', fontsize=12, loc='lower right')
+fig2_legend = plt.legend(title='Was_Injury', fontsize=14, loc='lower right')
+
+for t, l in zip(fig2_legend.texts, fig_labels):
+    t.set_text(l)
 
 plt.tight_layout()
 
@@ -197,7 +211,7 @@ plt.show()
 
 #                           FIGURE 3
 # Set the figure size
-plt.figure(figsize=(14, 8))
+plt.figure(figsize=(10, 6))
 
 # Create horizontal bar plot
 sns.barplot(x='count', y='traffic_control_device', hue='was_injury', data=df_control_condition_injury)
@@ -210,9 +224,96 @@ plt.title('Traffic Control Devices and Injury Outcome', fontsize=16)
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
 
-plt.legend(title='Was_Injury', fontsize=12, loc='lower right')
+fig3_legend = plt.legend(title='Was_Injury', fontsize=14, loc='lower right')
+
+for t, l in zip(fig3_legend.texts, fig_labels):
+    t.set_text(l)
 
 plt.tight_layout()
 
 plt.show()
+
+#                           FIGURE 4
+# Set the figure size
+plt.figure(figsize=(10, 6))
+
+# Create grouped bar plot
+sns.countplot(x='crash_severity', hue='dark_hours', data=df_3, palette=['orange', 'purple'])
+
+# Add labels and title
+plt.xlabel('Crash Severity', fontsize=12)
+plt.ylabel('Count of Crashes', fontsize=12)
+plt.title('Crash Severity and Darkness', fontsize=14)
+
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+
+fig4_legend = plt.legend(title='Was_Dark', fontsize=12, loc='upper right')
+
+for t, l in zip(fig4_legend.texts, fig_labels):
+    t.set_text(l)
+
+plt.tight_layout()
+
+plt.show()
+
+#                           FIGURE 5
+# Set the figure size
+plt.figure(figsize=(10, 6))
+
+# Create grouped bar plot
+sns.countplot(x=df_days_temp, hue=df_3['was_injury'])
+
+# Add labels and title
+plt.xlabel('Days Temperature in Farenheit', fontsize=14)
+plt.ylabel('Count of Crashes', fontsize=14)
+plt.title('Days Temperature and Injury Outcome', fontsize=16)
+
+# Rotate x-axis labels for better readability
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+
+# Set legend title and adjust legend fontsize
+fig5_legend = plt.legend(title='Was_Injury', fontsize=12, loc='upper left')
+
+for t, l in zip(fig5_legend.texts, fig_labels):
+    t.set_text(l)
+
+# Adjust layout to prevent overlapping labels
+plt.tight_layout()
+
+# Show plot
+plt.show()
+
+#                           FIGURE 6
+# Set the figure size
+plt.figure(figsize=(10, 6))
+
+# Create grouped bar plot
+sns.countplot(x=df_rounded_crash_time, hue=df_3['dark_hours'], palette=['orange', 'purple'])
+
+# Add labels and title
+plt.xlabel('Crash Times Rounded', fontsize=14)
+plt.ylabel('Count of Crashes', fontsize=14)
+plt.title('Crash Times and Darkness', fontsize=16)
+
+# Rotate x-axis labels for better readability
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+
+# Set legend title and adjust legend fontsize
+fig6_legend = plt.legend(title='Was_Dark', fontsize=12, loc='upper left')
+
+for t, l in zip(fig6_legend.texts, fig_labels):
+    t.set_text(l)
+
+# Adjust layout to prevent overlapping labels
+plt.tight_layout()
+
+# Show plot
+plt.show()
+
+
+
+
 
