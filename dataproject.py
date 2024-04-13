@@ -7,6 +7,11 @@ Created on Fri Feb 16 19:15:21 2024
 """
 
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Set option to display all columns
+pd.set_option('display.max_columns', None)
 
 # Read in data from csv file and set values equal to \N ('\\N') to nan
 df = pd.read_csv('chicago_2019_2022.csv', na_values=['\\N'])
@@ -49,7 +54,7 @@ print('uncleaned data types:\n', df_1.dtypes)
 
 df_2 = df_1.copy()
 
-print('\ncolumns and the count of missing values in the column before cleaning:')
+print('\ncount of missing values in each column before cleaning:')
 
 # Get count of missing values for each column
 missing_values_count = df_2.isnull().sum()
@@ -58,19 +63,19 @@ missing_values_count = df_2.isnull().sum()
 with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     print(missing_values_count)
 
-# Replace nan values in specific columns with placeholders
-df_2['total_injured'] = df_2['total_injured'].fillna(-1)
-df_2['total_killed'] = df_2['total_killed'].fillna(-1)
-df_2['injury_incapacitated'] = df_2['injury_incapacitated'].fillna(-1)
-df_2['injury_non_incapacitated'] = df_2['injury_incapacitated'].fillna(-1)
-df_2['days_snow'] = df_2['days_snow'].fillna(-1)
-df_2['days_snowdepth'] = df_2['days_snowdepth'].fillna(-1)
-df_2['days_windgust'] = df_2['days_windgust'].fillna(-1)
-df_2['days_preciptype'] = df_2['days_preciptype'].fillna('unknown')
+# Replace nan values in specific columns with back fill method
+df_2['total_injured'] = df_2['total_injured'].fillna(method='bfill')
+df_2['total_killed'] = df_2['total_killed'].fillna(method='bfill')
+df_2['injury_incapacitated'] = df_2['injury_incapacitated'].fillna(method='bfill')
+df_2['injury_non_incapacitated'] = df_2['injury_non_incapacitated'].fillna(method='bfill')
+df_2['days_snow'] = df_2['days_snow'].fillna(method='bfill')
+df_2['days_snowdepth'] = df_2['days_snowdepth'].fillna(method='bfill')
+df_2['days_windgust'] = df_2['days_windgust'].fillna(method='bfill')
+df_2['days_preciptype'] = df_2['days_preciptype'].fillna(method='bfill')
 df_2['most_severe_injury'] = df_2['most_severe_injury'].fillna('unknown')
 df_2['crash_hit_and_run'] = df_2['crash_hit_and_run'].fillna('unknown')
 
-print('\ncolumns and the count of missing values in the column after cleaning:')
+print('\ncount of missing values in each column after cleaning:')
 
 # Get count of missing values for each column
 missing_values_count = df_2.isnull().sum()
@@ -106,6 +111,19 @@ df_3 = df_2.copy()
 df_3['crash_hit_and_run'] = df_3['crash_hit_and_run'].astype('category')
 df_3['crash_severity'] = df_3['crash_severity'].astype('category')
 df_3['days_conditions'] = df_3['days_conditions'].astype('category')
+df_3['days_preciptype'] = df_3['days_preciptype'].astype('category')
+df_3['most_severe_injury'] = df_3['most_severe_injury'].astype('category')
+df_3['crash_type'] = df_3['crash_type'].astype('category')
+df_3['contributory_cause'] = df_3['contributory_cause'].astype('category')
+df_3['sec_contributory_cause'] = df_3['sec_contributory_cause'].astype('category')
+df_3['traffic_control_device'] = df_3['traffic_control_device'].astype('category')
+df_3['traffic_control_device_condition'] = df_3['traffic_control_device_condition'].astype('category')
+df_3['road_defect'] = df_3['road_defect'].astype('category')
+
+# Change columns to timedelta for analysis and comparison, removing '0 days' as it is not needed
+df_3['crash_time'] = pd.to_timedelta(df_3['crash_time'] + ':00').astype(str).str.split().str[-1]
+df_3['sunset'] = pd.to_timedelta(df_3['sunset']).astype(str).str.split().str[-1]
+df_3['sunrise'] = pd.to_timedelta(df_3['sunrise']).astype(str).str.split().str[-1]
 
 # Change columns to type int64 that should not be of type float64
 df_3['total_injured'] = df_3['total_injured'].astype('int64')
@@ -115,4 +133,86 @@ df_3['injury_non_incapacitated'] = df_3['injury_non_incapacitated'].astype('int6
 
 print('Cleaned data types:\n', df_3.dtypes)
 print('\nSample of cleaned data:\n', df_3.head(5))
-print('Shape of DataFrame df_3: ', df_3.shape)
+print('\nShape of DataFrame df_3: ', df_3.shape, '\n')
+
+# Create subsets of df_3 dataFrame
+df_3['was_deadly'] = df_3['total_killed'] > 0
+df_3['was_injury'] = df_3['total_injured'] > 0
+df_3['dark_hours'] = (df_3['crash_time'] < df_3['sunrise']) | (df_3['crash_time'] > df_3['sunset'])
+df_weather_injury = df_3.groupby(['days_conditions', 'was_injury']).size().reset_index(name='count')
+df_control_condition_injury = df_3.groupby(['traffic_control_device', 'was_injury']).size().reset_index(name='count')
+
+# print descriptive stats for key attributes
+for column in df_3:
+    print(df_3[column].describe(), '\n')
+
+# print correlation for DataFrame df_3
+#print(df_3.corr(numeric_only=True))
+
+######################   FIGURES / PLOTS  #############################
+
+#                           FIGURE 1
+# Set the figure size
+plt.figure(figsize=(10, 6))
+
+# Create grouped bar plot
+sns.countplot(x='crash_type', hue='was_injury', data=df_3)
+
+# Add labels and title
+plt.xlabel('Crash Type', fontsize=12)
+plt.ylabel('Count of Crashes', fontsize=12)
+plt.title('Crash Types and Injury Outcome', fontsize=14)
+
+# Rotate x-axis labels for better readability
+plt.xticks(rotation=45, fontsize=10)
+
+# Set legend title and adjust legend fontsize
+plt.legend(title='Was_Injury', fontsize=10)
+
+# Adjust layout to prevent overlapping labels
+plt.tight_layout()
+
+# Show plot
+plt.show()
+
+#                           FIGURE 2
+# Set the figure size
+plt.figure(figsize=(14, 8))
+
+# Create horizontal bar plot
+sns.barplot(x='count', y='days_conditions', hue='was_injury', data=df_weather_injury)
+
+# Add labels and title
+plt.xlabel('Count of Crashes', fontsize=12)
+plt.ylabel('Weather Conditions', fontsize=12)
+plt.title('Weather Conditions and Injury Outcome', fontsize=14)
+
+plt.xticks(fontsize=12)
+
+plt.legend(title='Was_Injury', fontsize=12, loc='lower right')
+
+plt.tight_layout()
+
+plt.show()
+
+#                           FIGURE 3
+# Set the figure size
+plt.figure(figsize=(14, 8))
+
+# Create horizontal bar plot
+sns.barplot(x='count', y='traffic_control_device', hue='was_injury', data=df_control_condition_injury)
+
+# Add labels and title
+plt.xlabel('Count of Crashes', fontsize=14)
+plt.ylabel('Traffic Control Devices', fontsize=14)
+plt.title('Traffic Control Devices and Injury Outcome', fontsize=16)
+
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+
+plt.legend(title='Was_Injury', fontsize=12, loc='lower right')
+
+plt.tight_layout()
+
+plt.show()
+
