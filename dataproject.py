@@ -159,6 +159,8 @@ for column in df_3:
 
 fig_labels = ['No', 'Yes']
 
+sns.set_style('whitegrid')
+
 #                           FIGURE 1
 # Set the figure size
 plt.figure(figsize=(10, 6))
@@ -238,7 +240,7 @@ plt.show()
 plt.figure(figsize=(10, 6))
 
 # Create grouped bar plot
-sns.countplot(x='crash_severity', hue='dark_hours', data=df_3, palette=['orange', 'purple'])
+sns.countplot(x='crash_severity', hue='dark_hours', data=df_3, width=0.5, palette=['orange', 'purple'])
 
 # Add labels and title
 plt.xlabel('Crash Severity', fontsize=12)
