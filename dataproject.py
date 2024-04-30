@@ -10,10 +10,11 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import calendar
+import numpy as np
 from sklearn.linear_model import BayesianRidge
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
@@ -50,7 +51,8 @@ missing_values_count = df_1.isnull().sum()
 with pd.option_context('display.max_rows', None, 'display.max_columns', None):
     print(missing_values_count)
 
-# Filter the copied DataFrame 'df_1' to include only rows where the value in the 'state' column is 'illinois'
+# Filter the copied DataFrame 'df_1' to include only the rows 
+# where the value in the 'state' column is 'illinois'
 df_1 = df_1[df_1['state'] == 'illinois']
 
 print('\nunique states after filtering: ', df_1['state'].unique())
@@ -102,11 +104,12 @@ df_numeric = df_2[numeric_column_names].copy()
 df_categorical = df_2[categorical_column_names].copy()
 df_datetime = df_2[datetime_column_names].copy()
 
-# NUMERIC IMPUTATION
+# NUMERIC IMPUTATION WITH BAYESIAN RIDGE
 imp_numeric = IterativeImputer(estimator=BayesianRidge(), max_iter=5, tol=1e-10, imputation_order='descending')
 df_numeric_imputed = imp_numeric.fit_transform(df_numeric)
 df_numeric_imputed = pd.DataFrame(df_numeric_imputed, columns=numeric_column_names)
 
+# Convert column Dtypes to int32
 df_numeric_imputed['total_injured'] = df_numeric_imputed['total_injured'].astype('int32')
 df_numeric_imputed['total_killed'] = df_numeric_imputed['total_killed'].astype('int32')
 df_numeric_imputed['injury_incapacitated'] = df_numeric_imputed['injury_incapacitated'].astype('int32')
@@ -115,13 +118,16 @@ df_numeric_imputed['num_vehicles_in_crash'] = df_numeric_imputed['num_vehicles_i
 df_numeric_imputed['precipprob'] = df_numeric_imputed['precipprob'].astype('int32')
 df_numeric_imputed['days_uvindex'] = df_numeric_imputed['days_uvindex'].astype('int32')
 
+# CATEGORCIAL IMPUTATION WITH MODE
 for col in df_categorical:
     df_categorical[col].fillna(df_categorical[col].mode()[0], inplace=True)
 
+# Reset indexes of Dtype DataFrames
 df_numeric_imputed.reset_index(drop=True, inplace=True)
 df_categorical.reset_index(drop=True, inplace=True)
 df_datetime.reset_index(drop=True, inplace=True)
 
+# Concat all Dtype DataFrames together to form the imputed DataFrame 'df_imputed'
 df_imputed = pd.concat([df_numeric_imputed, df_categorical, df_datetime], axis=1)
 
 # Create new columns and subsets of df_imputed dataFrame
@@ -137,11 +143,13 @@ df_control_condition_injury = df_imputed.groupby(['traffic_control_device', 'was
 df_imputed['sunrise'] = pd.to_datetime(df_imputed['sunrise'], format='%H:%M:%S')
 df_imputed['sunset'] = pd.to_datetime(df_imputed['sunrise'], format='%H:%M:%S')
 df_imputed['crash_time'] = pd.to_datetime(df_imputed['crash_time'], format='%H:%M:%S')
+
 df_rounded_crash_time = df_imputed['crash_time'].dt.hour.round()
 df_imputed['rounded_crash_time'] = df_imputed['crash_time'].dt.hour.round()
 
 df_imputed['crash_year'] = df_imputed['crash_date'].dt.year
 df_imputed['crash_month'] = df_imputed['crash_date'].dt.month_name()
+df_imputed['crash_month'] = df_imputed['crash_month'].astype('category')
 month_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 df_filter_year = df_imputed[df_imputed['crash_year'] != 2018]
@@ -162,6 +170,7 @@ hourly_data = fd.groupby(fd['crash_time'].dt.hour)[['total_killed', 'total_injur
 by_crash_type_data = fd.groupby(fd['crash_type'])[['total_killed', 'total_injured']].sum()
 
 df_imputed['crash_day'] = df_imputed['crash_date'].dt.day_name()
+df_imputed['crash_day'] = df_imputed['crash_day'].astype('category')
 crash_day_counts = df_imputed['crash_day'].value_counts()
 sorted_days = list(calendar.day_name)
 
@@ -221,26 +230,89 @@ sns.pairplot(sample_numeric_data, hue='was_deadly')
 plt.show()
 """
 
-tester_categorical_columns = categorical_columns.drop(columns=['most_severe_injury', 'sec_contributory_cause'])
+print(categorical_columns.columns)
+
+tester_categorical_columns = categorical_columns.drop(columns=['most_severe_injury', 'sec_contributory_cause', 'crash_month', 'crash_day', 'town'])
 tester_categorical_columns = pd.get_dummies(tester_categorical_columns)
 df_feat = pd.concat([numerical_columns, tester_categorical_columns], axis=1)
 
 df_tester = df_feat.drop(columns=['total_killed', 'total_injured', 'injury_incapacitated', 'injury_non_incapacitated', 'was_deadly'])
 
+# NEED TO GET SAME AMOUNT OF TRUE AND FALSE TESTERS FOR TARGET VARIABLE
+#print(df_tester['was_injury'].value_counts())
+
+was_injury_true_df = df_tester[df_tester['was_injury'] == True]
+was_injury_true_sample = was_injury_true_df.sample(n=54568, random_state=0)
+
+was_injury_false_df = df_tester[df_tester['was_injury'] == False]
+was_injury_false_sample = was_injury_false_df.sample(n=54568, random_state=0)
+
+df_model = pd.concat([was_injury_true_sample, was_injury_false_sample])
+df_model.reset_index(drop=True, inplace=True)
+
+"""
+#   K-FOLD CROSS VALIDATION
+
+X = df_model.drop('was_injury', axis=1)  # Features
+y = df_model['was_injury']  # Target variable
+
+# Initialize KFold with number of folds - 5
+k = 5
+kf = KFold(n_splits=k, shuffle=True, random_state=0)
+
+# Initialize KNN classifier (replace with your chosen classifier)
+classifier = KNeighborsClassifier(n_neighbors=25, weights='distance', metric='manhattan', p=2, algorithm='auto')
+
+# Initialize StandardScaler
+scaler = StandardScaler()
+
+# Lists to store evaluation results
+accuracy_scores = []
+
+# Perform k-fold cross-validation
+for train_index, test_index in kf.split(X):
+    # Split data into training and test sets
+    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+    y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+    
+    # Standardize features
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Fit classifier on standardized training data
+    classifier.fit(X_train_scaled, y_train)
+    
+    # Predict on standardized test data
+    y_pred = classifier.predict(X_test_scaled)
+    
+    # Evaluate accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+    accuracy_scores.append(accuracy)
+
+
+# Calculate mean and standard deviation of accuracy scores
+mean_accuracy = np.mean(accuracy_scores)
+std_accuracy = np.std(accuracy_scores)
+
+print("Mean Accuracy:", mean_accuracy)
+print("Standard Deviation of Accuracy:", std_accuracy)
+print('Accuracy Scores: ', accuracy_scores)
+"""
+
 # independent variables
-X = df_tester.drop('was_injury', axis=1)
+X = df_model.drop('was_injury', axis=1)
 # dependent variable
-y = df_tester['was_injury']
+y = df_model['was_injury']
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
 
-# Standardiz values for KNN classifier
+# Standardize values for KNN classifier
 sc = StandardScaler()
 X_train = sc.fit_transform(X_train)
 X_test = sc.transform(X_test)
 
 #The default metric is minkowski, and with p=2 is equivalent to the standard Euclidean metric.
-classifier = KNeighborsClassifier(n_neighbors = 10, metric = 'minkowski', p = 2, weights='distance', algorithm='auto')
+classifier = KNeighborsClassifier(n_neighbors = 25, metric = 'manhattan', p = 2, weights='distance', algorithm='auto')
 classifier.fit(X_train, y_train)
 
 y_pred = classifier.predict(X_test)
@@ -248,9 +320,6 @@ y_pred = classifier.predict(X_test)
 cm = confusion_matrix(y_test, y_pred)
 
 print(cm)
-print('Accuracy: ', accuracy_score(y_test, y_pred))
-print('Precision: ', precision_score(y_test, y_pred))
-print('Recall: ', recall_score(y_test, y_pred))
 print(classification_report(y_test,y_pred))
 
 ######################   FIGURES / PLOTS  #############################
